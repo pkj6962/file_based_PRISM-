@@ -48,3 +48,6 @@ exec_time	9.911798
 exec_time	9.396721
 exec_time	9.246393
 exec_time	9.319447
+exec_time	31.269147
+exec_time	13.465052
+exec_time	5.156102

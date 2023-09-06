@@ -169,10 +169,10 @@ namespace danzer{
     int rank = 0;
     int obj_cnt = 0;
     int numWorkers = 1;
-	uint64_t task_cnt = 0;
-	uint64_t task_cnt_per_rank = 0; 
+	  uint64_t task_cnt = 0;
+	  uint64_t task_cnt_per_rank = 0; 
 
-
+    int test_file_cnt = 0; 
 
 
 	// variable for load balance functionality

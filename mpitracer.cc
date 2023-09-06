@@ -738,6 +738,9 @@ namespace danzer
             bool taskFound = false; 
             while(!file_queue.queue.empty())
             {
+                // TestCode
+                cout << "rank " << rank << ' ' << "a1\n"; 
+
                 taskFound = true; 
                 
                 pthread_mutex_lock(&file_queue.mutex);
@@ -754,6 +757,7 @@ namespace danzer
                     cout << "error opening file | errno: " << errno << endl; 
                 test_open_cnt ++;  // passed
 
+                cout << "rank " << rank << ' ' << "a2\n"; 
 
 
 
@@ -761,6 +765,9 @@ namespace danzer
                 uint64_t remaining_file_size = file_size; 
                 for(uint64_t offset = 0; offset < file_size; offset += 2147479552)
                 {
+
+                    cout << "rank " << rank << ' ' << "a30\n"; 
+                
                     buffer = &bufferpool[reader_idx]; 
                  
                     pthread_mutex_lock(&buffer->mutex); 
@@ -779,6 +786,9 @@ namespace danzer
                     }
                     remaining_file_size -= buffer_size; 
 
+                    cout << "rank " << rank << ' ' << "a31\n"; 
+
+
                     bytesRead = pread(fd, buffer->data, buffer_size, offset);
                     if (bytesRead != buffer_size)
                     {
@@ -787,6 +797,7 @@ namespace danzer
                     if (bytesRead == -1)
                     {
                         perror("error reading file\n"); 
+                        cout << "error reading file\n" ; 
                     }
                     else{
                         if (bytesRead >= 0 && bytesRead < buffer_size)
@@ -797,14 +808,21 @@ namespace danzer
 
                         reader_idx = (reader_idx + 1) % POOL_SIZE ; 
                     }
+
+                    cout << "rank " << rank << ' ' << "a32\n"; 
+
                     pthread_cond_signal(&buffer->cond);
                     pthread_mutex_unlock(&buffer->mutex); 
-                    
-                }
+                        
+                    cout << "rank " << rank << ' ' << "a33\n"; 
                 
+                }
 
-
-
+                close(fd);
+                
+                // TestCode
+                
+                            
 
                 /*
                 
@@ -857,8 +875,18 @@ namespace danzer
                 reader_done = true; 
                 printf("reader done: %d\t\n", rank);
                 printf("rank%d\topen%d\n", rank, test_open_cnt); 
+                
+                for(Buffer &b : bufferpool){
+                    pthread_mutex_lock(&b.mutex);
+                    pthread_cond_signal(&b.cond);
+                    pthread_mutex_unlock(&b.mutex);
+                    if (b.filled)
+                            printf("Some buffers are filled\n"); 
+		        }
+                
                 break; 
             }
+            
 
         
         }                
@@ -872,21 +900,33 @@ namespace danzer
 
         while(1)
         {
+            cout << "rank " << rank << ' ' << "b1\n"; 
+
             Buffer * buffer = &bufferpool[worker_idx]; 
             pthread_mutex_lock(&buffer->mutex); 
 
+            // 버퍼가 비었는데 reader Thread는 아직 돌고 있다: 이 버퍼가 채워질때까지 기다려야 한다.
             while(!buffer->filled & !reader_done)
             {
                 pthread_cond_wait(&buffer->cond, &buffer->mutex); 
             }
+
+            cout << "rank " << rank << ' ' << "b2\n"; 
+
+
             if (reader_done && !buffer->filled)
             {
                 pthread_mutex_unlock(&buffer->mutex);
                 break; 
             }
             string str(buffer->data, buffer->size); 
+            test_file_cnt += 1; 
+            printf("rank %d %lld\n", rank, buffer->size); 
             chunk_fixed_size(str, buffer->size); 
             
+            cout << "rank " << rank << ' ' << "b3\n"; 
+
+
             test_work_cnt += 1; 
         
             buffer->filled = 0; 
@@ -895,6 +935,9 @@ namespace danzer
 
             pthread_cond_signal(&buffer->cond); 
             pthread_mutex_unlock(&buffer->mutex); 
+
+            cout << "rank " << rank << ' ' << "b4\n"; 
+
 
             if (reader_done)
             {
@@ -914,6 +957,8 @@ namespace danzer
                     break; 
                 }
             }
+
+            cout << "rank " << rank << ' ' << "b5\n";  
 
         }
 
@@ -1175,43 +1220,43 @@ namespace danzer
                 exit(-1);
             }
     
-            int rc2 = pthread_create(&reader, NULL, Dedupe::readerThreadStarter, this);
-            if(rc2) {
-                cout << "error: thread creation " << rc2 << endl;
-                exit(-1);
-            }
+            // int rc2 = pthread_create(&reader, NULL, Dedupe::readerThreadStarter, this);
+            // if(rc2) {
+            //     cout << "error: thread creation " << rc2 << endl;
+            //     exit(-1);
+            // }
 	
 		printf("numworkers:%d\n", numWorkers) ;
 		printf("loadbalance: %d\n", load_balance);
 	    vector<pthread_t> workerThreads(numWorkers);
         vector<ThreadArgs> threadArgs(numWorkers);	
 		
-	    for(int i = 0; i < numWorkers; i++) {
-                threadArgs[i].instance = this;
-                threadArgs[i].index = i;
+	    // for(int i = 0; i < numWorkers; i++) {
+        //         threadArgs[i].instance = this;
+        //         threadArgs[i].index = i;
 
-                int rc = pthread_create(&workerThreads[i], NULL, Dedupe::workerThreadStarter, &threadArgs[i]);
-                if(rc) {
-                    cout << "error: thread creation" << rc << endl;
-                    exit(-1);
-                }
-            }	
+        //         int rc = pthread_create(&workerThreads[i], NULL, Dedupe::workerThreadStarter, &threadArgs[i]);
+        //         if(rc) {
+        //             cout << "error: thread creation" << rc << endl;
+        //             exit(-1);
+        //         }
+        //     }	
 
         
 
             (void)pthread_join(comm, NULL);
 		
-        	(void)pthread_join(reader, NULL);
+        	// (void)pthread_join(reader, NULL);
 
    //       (void)pthread_join(worker, NULL);
     
-		for(int i = 0; i < numWorkers; i++) {
-                int rc = pthread_join(workerThreads[i], NULL);
-                if (rc){
-                    cout << "error: thread join" << rc << endl;
-                    exit(-1);
-                }
-        }		
+		// for(int i = 0; i < numWorkers; i++) {
+        //         int rc = pthread_join(workerThreads[i], NULL);
+        //         if (rc){
+        //             cout << "error: thread join" << rc << endl;
+        //             exit(-1);
+        //         }
+        // }		
 	
         }
 	
@@ -1224,6 +1269,7 @@ namespace danzer
     void Dedupe::chunk_fixed_size(const string &buffer, uint64_t obj_size){
         
         int test_single_chunk_cnt = 0; 
+        int test_is_last_chunk = 0; 
 
         uint64_t o_size = obj_size;
 		this->obj_cnt++;
@@ -1231,26 +1277,44 @@ namespace danzer
             return;
         }
         uint64_t o_pos = 0;
+        
 
         vector<string> fingerprints;
         //cout << "start fingerprinting" << endl;
         while (o_pos < o_size){
-	
-	    uint64_t cur_chunk_size = min(static_cast<uint64_t>(chunk_size), o_size -o_pos);
+
+
+            cout << "rank " << rank << ' ' << "k00\n"; 
+
+        
+	        uint64_t cur_chunk_size = min(static_cast<uint64_t>(chunk_size), o_size -o_pos);
             string chunk = buffer.substr(o_pos, cur_chunk_size);
-	    if(cur_chunk_size < chunk_size){
-		    chunk+= string(chunk_size - cur_chunk_size, '0');
-	    }	
-	    o_pos += chunk_size;
+	        if(cur_chunk_size < chunk_size){
+		        chunk += string(chunk_size - cur_chunk_size, '0');
+                test_is_last_chunk = 1; 
+	        }   	
+	        o_pos += chunk_size;
 
-        unsigned char temp_fp[SHA_DIGEST_LENGTH];
-        SHA1(reinterpret_cast<const unsigned char *>(chunk.c_str()), chunk_size, temp_fp);
-        test_chunk_cnt ++; 
-        test_single_chunk_cnt ++; 
-        string fp = GetHexRepresentation(temp_fp, SHA_DIGEST_LENGTH);
+            cout << "rank " << rank << ' ' << "k01"; 
+            printf(" %d %lld %d %d %d %d\n", test_file_cnt, obj_size, test_single_chunk_cnt, cur_chunk_size, chunk_size);
+            cout << "";
 
-        fingerprints.push_back(fp);
+
+            unsigned char temp_fp[SHA_DIGEST_LENGTH];
+            SHA1(reinterpret_cast<const unsigned char *>(chunk.c_str()), chunk_size, temp_fp);
+            test_chunk_cnt ++; 
+            test_single_chunk_cnt ++; 
+        
+            cout << "rank " << rank << ' ' << "k02\n"; 
+
+            string fp = GetHexRepresentation(temp_fp, SHA_DIGEST_LENGTH);
+
+            fingerprints.push_back(fp);
+
         }
+
+        cout << "rank " << rank << ' ' << "k1\n"; 
+
         // Create the fingerprint string
         string all_fingerprints;
         for (const string &fp : fingerprints)
@@ -1260,6 +1324,10 @@ namespace danzer
         string output_file = this->output_file.c_str() + to_string(this->rank) + ".txt";
         //cout << "output_file = " << output_file << endl;
         // Open the output file
+
+        cout << "rank " << rank << ' ' << "k1\n"; 
+
+
         ofstream ofs(output_file, ios::app);
         if (!ofs){
             cerr << "Error opening output file\n";
@@ -1267,12 +1335,11 @@ namespace danzer
         }
         ofs << all_fingerprints;
         ofs.close();
+
+        cout << "rank " << rank << ' ' << "k2\n"; 
+
     
-        uint64_t remainder = (obj_size % 4096 == 0)? 0 : 1; 
-
-        if ((obj_size / 4096 + remainder) != test_single_chunk_cnt)
-               printf("file_size\t%lld\tought_cnt\t%d\tchunk_cnt\t%d\n", obj_size, obj_size/4096 + remainder, test_single_chunk_cnt); 
-
+        
 
     }
 

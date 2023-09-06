@@ -272,7 +272,8 @@ void Dedupe:: file_task_load_balance(vector<pair<string, uint64_t>> & file_task_
 	{
 		auto file_task_queue = rank_allocator.top();
 		rank_allocator.pop(); 
-		cout << "file size sent to rank: " << file_task_queue->total_file_size  << endl ; 
+		printf("rank %d\t%lld\n", file_task_queue->cnt, file_task_queue->total_file_size); 
+		// cout << "file size sent to rank: " << file_task_queue->total_file_size  << endl ; 
 	// 	int rc = MPI_Send(file_task_queue->queue.c_str(), file_task_queue->queue.length()+1, MPI_CHAR, i+1,file_task_queue->cnt, MPI_COMM_WORLD); 
 	// 	if (rc != MPI_SUCCESS)
 	// 		cout << "MPI Send failed\n"; 		
