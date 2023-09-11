@@ -763,7 +763,9 @@ namespace danzer
 
                 // TODO: If file size is over 2GB, we should iteratively read file to the end. 
                 uint64_t remaining_file_size = file_size; 
-                for(uint64_t offset = 0; offset < file_size; offset += 2147479552)
+                uint64_t max_read_size = 104857600;
+				
+				for(uint64_t offset = 0; offset < file_size; offset += max_read_size)
                 {
 
                     cout << "rank " << rank << ' ' << "a30\n"; 
@@ -776,7 +778,7 @@ namespace danzer
                         pthread_cond_wait(&buffer->cond, &buffer->mutex); 
                     }
 
-                    uint64_t buffer_size = (2147479552 < remaining_file_size)? 2147479552:remaining_file_size; 
+                    uint64_t buffer_size = (max_read_size < remaining_file_size)? max_read_size:remaining_file_size; 
                     buffer->data = (char*)malloc(buffer_size);
                     if (buffer->data == NULL)
                     {
@@ -873,6 +875,16 @@ namespace danzer
             if (shutdown_flag && !taskFound)
             {
                 reader_done = true; 
+				
+				for (Buffer &b : bufferpool)
+				{
+					pthread_mutex_lock(&b.mutex); 
+					pthread_cond_signal(&b.cond); 
+					pthread_mutex_unlock(&b.mutex); 
+					if (b.filled)
+						printf("Some buffers are filled\n"); 
+				}
+
                 printf("reader done: %d\t\n", rank);
                 printf("rank%d\topen%d\n", rank, test_open_cnt); 
                 

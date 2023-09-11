@@ -141,7 +141,16 @@ void Dedupe::file_task_end_of_process(vector<File_task_queue> & file_task_queue)
 				if (rc != MPI_SUCCESS)
 					cout << "MPI Send Failed\n";
 			}
+		
+		
+			printf("total_file_size\t%lld\n", q.total_file_size); 
+		
 		}
+
+
+		
+
+
 	}
 	for(int i=1; i < worldSize; i++) {
     	MPI_Send(termination_task, sizeof(TERMINATION_MSG), MPI_CHAR, i, 0, MPI_COMM_WORLD);
@@ -253,6 +262,8 @@ void Dedupe:: file_task_load_balance(vector<pair<string, uint64_t>> & file_task_
 	{
 		auto file_task_queue = rank_allocator.top(); 
 		rank_allocator.pop();
+	
+		printf("%lld ", file_task.second); 
 
 		// file_task_queue->queue += file_task.first;
 		file_task_queue->total_file_size += file_task.second; 
@@ -265,6 +276,8 @@ void Dedupe:: file_task_load_balance(vector<pair<string, uint64_t>> & file_task_
 			cout << "MPI Send failed\n"; 	
 
 	}
+	printf("\n"); 
+
 
 	cout << "hello world\n"; 
 
