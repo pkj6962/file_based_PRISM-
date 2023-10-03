@@ -732,15 +732,33 @@ namespace danzer
         // test code 
         static int test_open_cnt = 0;
 
+        // Code for LoadStandardization Evaluation 
+        int datasetIdx = dataset_map.find(Dataset.c_str())->second; 
+        uint64_t standardized_load_size = StandardizedTaskSizePer24Process[datasetIdx];   
+        uint64_t total_read_size = 0; 
+        bool standardized_task_done = false; 
+        FILE * fp = fopen("log_file.eval", "a"); 
+        if (fp == NULL)
+            printf("file open error\n"); 
+
+		
+		int NumWorkers = worldSize - 1; 
+		//string read_size_log = Dataset.c_str(); 
+		string read_size_log = Dataset + to_string(NumWorkers); 
+		ofstream ofs(read_size_log, ios::app); 
+		if (!ofs)
+		{
+			cerr << "Error opening output file\n"; 
+			exit(0); 
+		}
 
         while(1)
-        {
+        { 
             bool taskFound = false; 
             while(!file_queue.queue.empty())
-            {
+            {      
                 // TestCode
-                cout << "rank " << rank << ' ' << "a1\n"; 
-
+    
                 taskFound = true; 
                 
                 pthread_mutex_lock(&file_queue.mutex);
@@ -757,18 +775,13 @@ namespace danzer
                     cout << "error opening file | errno: " << errno << endl; 
                 test_open_cnt ++;  // passed
 
-                cout << "rank " << rank << ' ' << "a2\n"; 
-
-
 
                 // TODO: If file size is over 2GB, we should iteratively read file to the end. 
                 uint64_t remaining_file_size = file_size; 
-                uint64_t max_read_size = 104857600;
-				
+                uint64_t max_read_size = 1048576;
+                // uint64_t max_read_size = 104857600;		
 				for(uint64_t offset = 0; offset < file_size; offset += max_read_size)
                 {
-
-                    cout << "rank " << rank << ' ' << "a30\n"; 
                 
                     buffer = &bufferpool[reader_idx]; 
                  
@@ -787,9 +800,6 @@ namespace danzer
                         // printf("requested memory size: %lld\n", buffer_size); 
                     }
                     remaining_file_size -= buffer_size; 
-
-                    cout << "rank " << rank << ' ' << "a31\n"; 
-
 
                     bytesRead = pread(fd, buffer->data, buffer_size, offset);
                     if (bytesRead != buffer_size)
@@ -811,63 +821,29 @@ namespace danzer
                         reader_idx = (reader_idx + 1) % POOL_SIZE ; 
                     }
 
-                    cout << "rank " << rank << ' ' << "a32\n"; 
-
                     pthread_cond_signal(&buffer->cond);
                     pthread_mutex_unlock(&buffer->mutex); 
-                        
-                    cout << "rank " << rank << ' ' << "a33\n"; 
-                
+
+                    total_read_size += bytesRead;
+                    // Code for LoadStandarization Evaluation     
+                    
+                    if (total_read_size >= standardized_load_size)
+                    {
+                        standardized_task_done = true; 
+                        taskFound = false; 
+                        break; 
+                    }
+                    
+      
                 }
 
                 close(fd);
-                
-                // TestCode
-                
-                            
-
-                /*
-                
-                // Hold one single emtpy buffer from buffer pool.
-                buffer = &bufferpool[reader_idx];
-
-                pthread_mutex_lock(&buffer->mutex);
-                while(buffer->filled)
+                                
+                // Code for Load Standardization Evaluation
+                if (standardized_task_done)
                 {
-                    pthread_cond_wait(&buffer->cond, &buffer->mutex); 
+                    break; 
                 }
-
-                // buffer->data = new char[file_size+1];
-                // buffer->data = new char[1073741824+1];
-                
-                buffer->data = (char * )malloc(file_size);
-                if(buffer->data == NULL)
-                    cout << "memory allocation error on reader Thread \n";  
-                // bytesRead = read(fd, buffer->data, file_size); 
-                bytesRead = read(fd, buffer->data, file_size); 
-                
-                if(bytesRead != file_size)
-                {
-                    printf("read size is wrong\t%lld\t%lld\n", file_size, bytesRead); 
-                }
-
-                if (bytesRead == -1)
-                {
-                    perror("error reading file");
-                    // exit(1); 
-                }
-                //TODO: Check if there is a case where bytesRead and filesize is different. 
-                buffer->filled = 1; 
-                if (bytesRead >= 0 && bytesRead < file_size)
-                    buffer->data[bytesRead] = '\0'; 
-                buffer->size = bytesRead; 
-            
-
-                reader_idx = (reader_idx + 1) % POOL_SIZE; 
-            
-                pthread_cond_signal(&buffer->cond);
-                pthread_mutex_unlock(&buffer->mutex); 
-*/
             }
 
             
@@ -885,9 +861,10 @@ namespace danzer
 						printf("Some buffers are filled\n"); 
 				}
 
-                printf("reader done: %d\t\n", rank);
-                printf("rank%d\topen%d\n", rank, test_open_cnt); 
-                
+                printf("reader done\t%d\t%lld\n", rank, total_read_size);
+				ofs << total_read_size << '\n'; 
+				ofs.close(); 
+
                 for(Buffer &b : bufferpool){
                     pthread_mutex_lock(&b.mutex);
                     pthread_cond_signal(&b.cond);
@@ -902,8 +879,8 @@ namespace danzer
 
         
         }                
-
-    }
+		fclose(fp); 
+    }	
 
     void * Dedupe::workerThread(int w_idx)
     {
@@ -912,7 +889,6 @@ namespace danzer
 
         while(1)
         {
-            cout << "rank " << rank << ' ' << "b1\n"; 
 
             Buffer * buffer = &bufferpool[worker_idx]; 
             pthread_mutex_lock(&buffer->mutex); 
@@ -923,7 +899,6 @@ namespace danzer
                 pthread_cond_wait(&buffer->cond, &buffer->mutex); 
             }
 
-            cout << "rank " << rank << ' ' << "b2\n"; 
 
 
             if (reader_done && !buffer->filled)
@@ -933,10 +908,8 @@ namespace danzer
             }
             string str(buffer->data, buffer->size); 
             test_file_cnt += 1; 
-            printf("rank %d %lld\n", rank, buffer->size); 
             chunk_fixed_size(str, buffer->size); 
             
-            cout << "rank " << rank << ' ' << "b3\n"; 
 
 
             test_work_cnt += 1; 
@@ -948,7 +921,6 @@ namespace danzer
             pthread_cond_signal(&buffer->cond); 
             pthread_mutex_unlock(&buffer->mutex); 
 
-            cout << "rank " << rank << ' ' << "b4\n"; 
 
 
             if (reader_done)
@@ -970,14 +942,7 @@ namespace danzer
                 }
             }
 
-            cout << "rank " << rank << ' ' << "b5\n";  
-
         }
-
-        printf("rank\t%d\tchunk_cnt%d\n", rank, test_chunk_cnt);
-
-
-
     } 
 
 
@@ -1135,6 +1100,10 @@ namespace danzer
     int Dedupe::traverse_directory(string directory_path){
         cout << "Directory traversing started" << endl;
 
+
+        size_t lastSlashPos = directory_path.find_last_of('/'); 
+		Dataset = directory_path.substr(lastSlashPos + 1); 
+		
         // Initialize MPI environment
 	    int provided;
         MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
@@ -1155,6 +1124,13 @@ namespace danzer
 
         if (rank == MASTER){
 	        
+            FILE * fp = fopen("exec_time.eval", "a"); 
+            if (fp == NULL)
+                printf("file open error\n"); 
+            fprintf(fp, "%s\t", Dataset); 
+			fclose(fp); 
+		
+
             vector<File_task_queue> file_task_queue(worldSize-1); 
 			vector<pair<string, uint64_t>> file_task_list;  // Load Balance			
 			
@@ -1232,43 +1208,43 @@ namespace danzer
                 exit(-1);
             }
     
-            // int rc2 = pthread_create(&reader, NULL, Dedupe::readerThreadStarter, this);
-            // if(rc2) {
-            //     cout << "error: thread creation " << rc2 << endl;
-            //     exit(-1);
-            // }
+            int rc2 = pthread_create(&reader, NULL, Dedupe::readerThreadStarter, this);
+            if(rc2) {
+                cout << "error: thread creation " << rc2 << endl;
+                exit(-1);
+            }
 	
 		printf("numworkers:%d\n", numWorkers) ;
 		printf("loadbalance: %d\n", load_balance);
 	    vector<pthread_t> workerThreads(numWorkers);
         vector<ThreadArgs> threadArgs(numWorkers);	
 		
-	    // for(int i = 0; i < numWorkers; i++) {
-        //         threadArgs[i].instance = this;
-        //         threadArgs[i].index = i;
+	    for(int i = 0; i < numWorkers; i++) {
+                threadArgs[i].instance = this;
+                threadArgs[i].index = i;
 
-        //         int rc = pthread_create(&workerThreads[i], NULL, Dedupe::workerThreadStarter, &threadArgs[i]);
-        //         if(rc) {
-        //             cout << "error: thread creation" << rc << endl;
-        //             exit(-1);
-        //         }
-        //     }	
+                int rc = pthread_create(&workerThreads[i], NULL, Dedupe::workerThreadStarter, &threadArgs[i]);
+                if(rc) {
+                    cout << "error: thread creation" << rc << endl;
+                    exit(-1);
+                }
+            }	
 
         
 
             (void)pthread_join(comm, NULL);
 		
-        	// (void)pthread_join(reader, NULL);
+        	(void)pthread_join(reader, NULL);
 
    //       (void)pthread_join(worker, NULL);
     
-		// for(int i = 0; i < numWorkers; i++) {
-        //         int rc = pthread_join(workerThreads[i], NULL);
-        //         if (rc){
-        //             cout << "error: thread join" << rc << endl;
-        //             exit(-1);
-        //         }
-        // }		
+		for(int i = 0; i < numWorkers; i++) {
+                int rc = pthread_join(workerThreads[i], NULL);
+                if (rc){
+                    cout << "error: thread join" << rc << endl;
+                    exit(-1);
+                }
+        }		
 	
         }
 	
@@ -1293,12 +1269,7 @@ namespace danzer
 
         vector<string> fingerprints;
         //cout << "start fingerprinting" << endl;
-        while (o_pos < o_size){
-
-
-            cout << "rank " << rank << ' ' << "k00\n"; 
-
-        
+        while (o_pos < o_size){        
 	        uint64_t cur_chunk_size = min(static_cast<uint64_t>(chunk_size), o_size -o_pos);
             string chunk = buffer.substr(o_pos, cur_chunk_size);
 	        if(cur_chunk_size < chunk_size){
@@ -1307,25 +1278,18 @@ namespace danzer
 	        }   	
 	        o_pos += chunk_size;
 
-            cout << "rank " << rank << ' ' << "k01"; 
-            printf(" %d %lld %d %d %d %d\n", test_file_cnt, obj_size, test_single_chunk_cnt, cur_chunk_size, chunk_size);
-            cout << "";
-
-
+    
             unsigned char temp_fp[SHA_DIGEST_LENGTH];
             SHA1(reinterpret_cast<const unsigned char *>(chunk.c_str()), chunk_size, temp_fp);
             test_chunk_cnt ++; 
             test_single_chunk_cnt ++; 
-        
-            cout << "rank " << rank << ' ' << "k02\n"; 
+    
 
             string fp = GetHexRepresentation(temp_fp, SHA_DIGEST_LENGTH);
 
             fingerprints.push_back(fp);
 
         }
-
-        cout << "rank " << rank << ' ' << "k1\n"; 
 
         // Create the fingerprint string
         string all_fingerprints;
@@ -1337,21 +1301,13 @@ namespace danzer
         //cout << "output_file = " << output_file << endl;
         // Open the output file
 
-        cout << "rank " << rank << ' ' << "k1\n"; 
-
-
         ofstream ofs(output_file, ios::app);
         if (!ofs){
             cerr << "Error opening output file\n";
             exit(0);
         }
         ofs << all_fingerprints;
-        ofs.close();
-
-        cout << "rank " << rank << ' ' << "k2\n"; 
-
-    
-        
+        ofs.close();         
 
     }
 
@@ -1473,12 +1429,13 @@ int main(int argc, char **argv)
 	
 	if (rank == 0)
 	{
-		FILE * fp = fopen("exec_time.txt", "a"); 
+		FILE * fp = fopen("exec_time.eval", "a"); 
 		if (fp == NULL)
 			printf("file open error\n"); 
 		
-		fprintf(fp, "exec_time\t%lf\n", duration.count()); 
+		fprintf(fp, "file_based\t%lf\n", duration.count()); 
         cout << "Execution time: " << duration.count() << " seconds" << endl;
+		fclose(fp); 
 	}
 	return 0;
 
