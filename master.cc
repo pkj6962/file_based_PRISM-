@@ -198,10 +198,18 @@ void Dedupe::Msg_Push(char * buffer, char * Msg, int idx){
 void Dedupe::file_task_distribution(std::filesystem::directory_entry entry, vector<File_task_queue> & file_task_queue, vector<pair<string, uint64_t>> &file_task_list)
 {
 	static int turn = 0 ; 
+
+
 	struct stat64 sb; 
+	int workerNumber = worldSize-1 ; 
 
+	// Test code for Random Scheduling
+	static int task_remaining_workers=workerNumber; 
+	int MAX_FILE_NUM_PER_WORKER = 6; 
+	srand((unsigned int)time(NULL)); 
+	
 	string file_path = entry.path(); 
-
+	
 	stat64(entry.path().c_str(), &sb);
 	uint64_t file_size = sb.st_size; 
 
@@ -212,23 +220,50 @@ void Dedupe::file_task_distribution(std::filesystem::directory_entry entry, vect
 	file_task_queue[turn].cnt += 1; 
 	file_task_queue[turn].total_file_size += file_size; 		
 
+	
+	// Test code for Random Scheduling
+	if (file_task_queue[turn].cnt == MAX_FILE_NUM_PER_WORKER) 
+	{
+		task_remaining_workers -= 1;
+	}
+
+
 
 	file_task_list.push_back(make_pair(file_path, file_size)); 
 
-
-	if (!load_balance && file_task_queue[turn].cnt == TASK_QUEUE_FULL)
+	
+	// Code for Random scheduling 
+	if (!load_balance && file_task_queue[turn].cnt >= TASK_QUEUE_FULL)
+	//if (!load_balance && file_task_queue[turn].cnt == TASK_QUEUE_FULL)
 	{
-		int rc = MPI_Send(file_task_queue[turn].queue.c_str(), file_task_queue[turn].queue.length()+1, MPI_CHAR, turn % (worldSize-1) + 1,TASK_QUEUE_FULL, MPI_COMM_WORLD); 
+		// Code for random scheduling
+		int rc = MPI_Send(file_task_queue[turn].queue.c_str(), file_task_queue[turn].queue.length()+1, MPI_CHAR, turn % (worldSize-1) + 1, 1, MPI_COMM_WORLD); 
+		//int rc = MPI_Send(file_task_queue[turn].queue.c_str(), file_task_queue[turn].queue.length()+1, MPI_CHAR, turn % (worldSize-1) + 1,TASK_QUEUE_FULL, MPI_COMM_WORLD); 
 
 		if (rc != MPI_SUCCESS)
 			cout << "MPI Send failed\n"; 
 
 		file_task_queue[turn].queue.clear(); 
-		file_task_queue[turn].cnt = 0; 
+		
+		// Random Scheduling: it should be uncommented
+		//file_task_queue[turn].cnt = 0; 
 	}
+	
+	// it should be uncommented back 
+	//turn = (turn + 1) % (worldSize-1);
 
-	turn = (turn + 1) % (worldSize-1);
+	// Random Scheduling
+	do{
+		turn = rand() % workerNumber; 
+	}while (file_task_queue[turn].cnt == MAX_FILE_NUM_PER_WORKER  &&  task_remaining_workers != 0);
+	
+	/*
+	turn: 워커 idx (0~workerNumber-1)
+	cnt: 해당 워커에게 분배한 파일작업의 개수
+	모든 file_task_queue에게 배분한 파일 작업의 개수가 6개로 같으면 (96*6=576) 마스터는 종료해야 함.
 
+
+	*/
 
 }
 

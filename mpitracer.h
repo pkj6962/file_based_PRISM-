@@ -34,7 +34,8 @@
 #define POOL_SIZE 100 // 100 buffers in buffer pool
 // #define POOL_SIZE 1000 // Test Purpose 
 #define OST_NUMBER 24
-#define TASK_QUEUE_FULL 4
+//#define TASK_QUEUE_FULL 4
+#define TASK_QUEUE_FULL 1 // temp for tail-cutting evaluation
 #define MAX_FILE_PATH_LEN 320 //320
 #define MASTER 0
 #define TERMINATION_MSG "TERMINATION"
@@ -190,12 +191,35 @@ namespace danzer{
   uint64_t test_chunk_cnt = 0; 
 
 
-  string Dataset; 
+
+	string Dataset; 
 	enum dataset{
-		mpas=0, grims, qchem, nastran, roms, abaqus, lammps, qe, qmc, pytorch
+		mpas=0, grims, qchem, roms, abaqus, lammps, qe, qmc, cesm, msc, grommacs, siesta, total
 	}; 
 	map<string, dataset> dataset_map = boost::assign::map_list_of
-		("mpas", mpas)("grims", grims)("nastran", nastran)("roms", roms)("abaqus", abaqus)("lammps", lammps)("qe", qe)("qmc", qmc)("pytorch", pytorch); 
+		("mpas", mpas)("grims", grims)("qchem", qchem)("roms", roms)("abaqus", abaqus)("lammps", lammps)("qe", qe)("qmc", qmc)("cesm", cesm)("msc", msc)("grommacs", grommacs)("siesta", siesta)("dataset", total); 
+
+
+	
+	
+	uint64_t StandardizedTaskSizePerProcess[12][4] =
+	{
+		{}, // 1mpas 
+		{}, // 2grims
+		{3341 * MB, 0, 0, 0}, // 3qchem  
+		{5515509760,	2143045504,	732649767,	857382650}, // 4roms 
+		{1780 * MB, 1780 * MB, 1780 * MB, 1780 * MB}, // abaqus all equal to 97proc 
+		//{5515509760,	2143045504,	732649767,	857382650}, // 4roms->temporary for abaqus 
+		//{}, // 5abaqus 
+		{}, // 6lammps
+		{2803391651,	1302645772,	849047750,	544757172}, // 7qe
+		{}, // qmc 
+		{8573 * MB, 0, 0, 0}, // cesm 
+		{4828968097,	2358521078,	0,	958400427}, // msc
+		{}, // grommacs 
+		{14328 * MB, 0, 0, 0} // siesta 
+	};
+
 
 
 	uint64_t StandardizedTaskSizePer24Process[10] =
@@ -203,7 +227,7 @@ namespace danzer{
 			917 * MB,	// mpas 
 			335 * MB,	// grims
 			3342 * MB,	// qchem
-			53 * MB,	// nastran
+			//53 * MB,	// nastran
 			5260 * MB,	// roms
 			10975 * MB,	//1780 (96)	 2457(72) //5070 (48), 	// 10975(24),	// abaqus
 			120	* MB,		//351 * MB,	// lammps

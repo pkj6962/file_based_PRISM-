@@ -732,20 +732,26 @@ namespace danzer
         // test code 
         static int test_open_cnt = 0;
 
+
+
+		// Code for LoadStandardization Evaluation
+		int NumWorkers = worldSize-1; 
+		int NumWorkerIdx = NumWorkers/24 - 1;
+		int datasetIdx = dataset_map.find(Dataset.c_str())->second; 
+		
+		uint64_t standardized_load_size = StandardizedTaskSizePerProcess[datasetIdx][NumWorkerIdx]; 
+
+		printf("standardized_load_size: %lld\n", standardized_load_size); 
+
         // Code for LoadStandardization Evaluation 
-        int datasetIdx = dataset_map.find(Dataset.c_str())->second; 
-        uint64_t standardized_load_size = StandardizedTaskSizePer24Process[datasetIdx];   
+        //int datasetIdx = dataset_map.find(Dataset.c_str())->second; 
+        //uint64_t standardized_load_size = StandardizedTaskSizePer24Process[datasetIdx];   
         uint64_t total_read_size = 0; 
         bool standardized_task_done = false; 
-        FILE * fp = fopen("log_file.eval", "a"); 
-        if (fp == NULL)
-            printf("file open error\n"); 
-
-		
-		int NumWorkers = worldSize - 1; 
+	
 		//string read_size_log = Dataset.c_str(); 
 		string read_size_log = Dataset + to_string(NumWorkers); 
-		ofstream ofs(read_size_log, ios::app); 
+		ofstream ofs(read_size_log, ios::out | ios::app); 
 		if (!ofs)
 		{
 			cerr << "Error opening output file\n"; 
@@ -779,7 +785,7 @@ namespace danzer
                 // TODO: If file size is over 2GB, we should iteratively read file to the end. 
                 uint64_t remaining_file_size = file_size; 
                 uint64_t max_read_size = 1048576;
-                // uint64_t max_read_size = 104857600;		
+                //uint64_t max_read_size = 104857600;		
 				for(uint64_t offset = 0; offset < file_size; offset += max_read_size)
                 {
                 
@@ -797,7 +803,6 @@ namespace danzer
                     {
                         cout << "memory alloction error on readerThread errno: " << errno << endl;
                         cout << "requested memory size: " << buffer_size << endl; 
-                        // printf("requested memory size: %lld\n", buffer_size); 
                     }
                     remaining_file_size -= buffer_size; 
 
@@ -826,14 +831,14 @@ namespace danzer
 
                     total_read_size += bytesRead;
                     // Code for LoadStandarization Evaluation     
-                    
+                    /*
                     if (total_read_size >= standardized_load_size)
                     {
                         standardized_task_done = true; 
                         taskFound = false; 
                         break; 
                     }
-                    
+                    */ 
       
                 }
 
@@ -846,7 +851,6 @@ namespace danzer
                 }
             }
 
-            
             
             if (shutdown_flag && !taskFound)
             {
@@ -879,7 +883,6 @@ namespace danzer
 
         
         }                
-		fclose(fp); 
     }	
 
     void * Dedupe::workerThread(int w_idx)
@@ -1103,8 +1106,11 @@ namespace danzer
 
         size_t lastSlashPos = directory_path.find_last_of('/'); 
 		Dataset = directory_path.substr(lastSlashPos + 1); 
+		if (Dataset.empty())
+			Dataset = "total"; 
+        
 		
-        // Initialize MPI environment
+		// Initialize MPI environment
 	    int provided;
         MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
 
@@ -1144,32 +1150,60 @@ namespace danzer
 			memset(size_per_rank, 0, sizeof(uint64_t) * worldSize); 
 			
 			
-			auto start = chrono::high_resolution_clock::now();
+			//auto start = chrono::high_resolution_clock::now();
 			
-			for (const auto &dir_entry: filesystem::recursive_directory_iterator(directory_path)){
-                total_file ++ ;
-
-                if(filesystem::is_symlink(dir_entry)){
-                    // cout << "Symlink encountered\n"; 
-                    continue; 
-                }
+			// Code to iterate certain subdirectory
+			
+			for (const auto& dir_entry: filesystem::directory_iterator(directory_path)){
+				if (dir_entry.path().filename().string().find("overlap_test5") == string::npos)
+				{
+					cout << "Directory " << dir_entry.path().filename().string() <<" encountered\n"; 
+					continue; 
+				}
 				
-                if(dir_entry.is_regular_file()){
-                    test_regular_file_cnt += 1; 
-				    file_task_distribution(dir_entry, file_task_queue, file_task_list); 
-                    continue;
-                }
+				cout << "We finally meet " << dir_entry.path().filename().string() << endl; 
+			
+				for(const auto &dir_entry: filesystem::recursive_directory_iterator(directory_path + dir_entry.path().filename().string())){
 
-                unchecked_file ++ ; 
-            }
+			
+				//for (const auto &dir_entry: filesystem::recursive_directory_iterator(directory_path)){
+					total_file ++ ;
+
+					if(filesystem::is_symlink(dir_entry)){
+						// cout << "Symlink encountered\n"; 
+						continue; 
+					}
+				
+				    if(dir_entry.is_regular_file()){
+						if (dir_entry.path().filename().string().find(".sh") != string::npos)
+						{
+							continue;
+						}
+
+					    test_regular_file_cnt += 1;
+						file_task_distribution(dir_entry, file_task_queue, file_task_list); 
+						continue;
+					}
+
+					unchecked_file ++ ; 
+				}
+
+			// Code to iterate certain directory
+			}	
 		
 
+			auto start = chrono::high_resolution_clock::now();
 			if (load_balance)
 			{
                 file_task_load_balance(file_task_list); 
 				//object_task_load_balance(task_queue); f
 			}
-			
+			auto end = chrono::high_resolution_clock::now();
+			// Calculate the duration
+			chrono::duration<double> duration = end - start;
+			cout << "load balance has elapsed " << duration.count() << endl; 
+
+
 			printf("unchecked file: %d/%d\n", unchecked_file, total_file); 
             printf("user-configured PFL file: %d\n", this->non_default_pfl); 
             printf("total_file_size: %lld\n", total_file_size); 
@@ -1229,7 +1263,7 @@ namespace danzer
                     exit(-1);
                 }
             }	
-
+		
         
 
             (void)pthread_join(comm, NULL);
@@ -1301,7 +1335,7 @@ namespace danzer
         //cout << "output_file = " << output_file << endl;
         // Open the output file
 
-        ofstream ofs(output_file, ios::app);
+        ofstream ofs(output_file, ios::out | ios::app);
         if (!ofs){
             cerr << "Error opening output file\n";
             exit(0);
@@ -1324,7 +1358,8 @@ int main(int argc, char **argv)
     int rank;
     int numWorkers = 1;
 	int load_balance = 1; 
-    while ((c = getopt(argc, argv, "f:s:m:i:o:t:l:")) != -1)
+	int numWorkerProc; 
+    while ((c = getopt(argc, argv, "f:s:m:i:o:t:l:n:")) != -1)
     {
         switch (c)
         {
@@ -1349,6 +1384,9 @@ int main(int argc, char **argv)
 		case 'l':
 			load_balance = atoi(optarg);	    
             break;
+		case 'n':
+			numWorkerProc = atoi(optarg); 
+			break; 
         default:
             break;
         }
@@ -1429,13 +1467,23 @@ int main(int argc, char **argv)
 	
 	if (rank == 0)
 	{
-		FILE * fp = fopen("exec_time.eval", "a"); 
-		if (fp == NULL)
-			printf("file open error\n"); 
-		
-		fprintf(fp, "file_based\t%lf\n", duration.count()); 
+		size_t lastSlash = directory_path.rfind('/'); 
+		string Dataset = directory_path.substr(lastSlash+1); 
+		if (Dataset.empty())
+			Dataset = "total";
+
+
+
+		string result= "standardized_load_result.eval"; 
+		ofstream ofs(result, ios::out | ios::app); 
+		if (!ofs)
+		{
+			cerr << "Error opening output file\n"; 
+			exit(0); 
+		}
+		ofs << Dataset << '\t' << numWorkerProc << '\t' << "file" << '\t' << (load_balance? "lb":"none") << '\t' << duration.count() << endl;  
+
         cout << "Execution time: " << duration.count() << " seconds" << endl;
-		fclose(fp); 
 	}
 	return 0;
 

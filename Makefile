@@ -11,7 +11,7 @@ output = fb_danzer_obj
 
 all: main
 
-main: mpitracer.cc
+main: mpitracer.cc master.cc 
 	$(MPICXX) $(CFLAGS) -o fb_danzer_obj mpitracer.cc master.cc $(LIBS)
 
 clean:
