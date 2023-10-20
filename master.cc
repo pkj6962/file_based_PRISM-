@@ -203,9 +203,12 @@ void Dedupe::file_task_distribution(std::filesystem::directory_entry entry, vect
 	struct stat64 sb; 
 	int workerNumber = worldSize-1 ; 
 
-	// Test code for Random Scheduling
+	// Test code for Random Scheduling & Synthetic Dataset 
 	static int task_remaining_workers=workerNumber; 
-	int MAX_FILE_NUM_PER_WORKER = 6; 
+	int NUMFILES = 576; 
+	int MAX_FILE_NUM_PER_WORKER = 576 / workerNumber; 
+
+	
 	srand((unsigned int)time(NULL)); 
 	
 	string file_path = entry.path(); 

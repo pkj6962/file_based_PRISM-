@@ -7,12 +7,12 @@ CFLAGS=-std=c++17 -O0 -g -fpermissive
 
 MPICXX=mpicxx
 
-output = fb_danzer_obj_wo_lb
+output = fb_danzer_obj
 
 all: main
 
 main: mpitracer.cc master.cc 
-	$(MPICXX) $(CFLAGS) -o fb_danzer_obj_wo_lb mpitracer.cc master.cc $(LIBS)
+	$(MPICXX) $(CFLAGS) -o fb_danzer_obj mpitracer.cc master.cc $(LIBS)
 
 clean:
 	rm $(output)
