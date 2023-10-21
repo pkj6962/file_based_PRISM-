@@ -1102,7 +1102,7 @@ namespace danzer
 
     int Dedupe::traverse_directory(string directory_path){
         cout << "Directory traversing started" << endl;
-
+		cout << "number of worker: " << worldSize-1 << endl; 
 
         size_t lastSlashPos = directory_path.find_last_of('/'); 
 		Dataset = directory_path.substr(lastSlashPos + 1); 
