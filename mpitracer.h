@@ -302,6 +302,14 @@ namespace danzer{
     void object_task_buffer_free (char *); 
     void Msg_Push(char * buffer, char * Msg, int idx); 
 
+
+	// Utility Function
+	double calculateMean(vector<double> list);
+	double calculateStddev(vector<double> list, double mean);
+	void output_log(const char * log_file_name, double data1, double data2);
+	void output_log(const char * log_file_name, const char *thread_type, int rank, double exec_time);
+
+
   };
 
     typedef struct {

@@ -732,7 +732,7 @@ namespace danzer
         // test code 
         static int test_open_cnt = 0;
 
-
+		vector <double> reading_time; 
 
 		// Code for LoadStandardization Evaluation
 		int NumWorkers = worldSize-1; 
@@ -757,6 +757,10 @@ namespace danzer
 			cerr << "Error opening output file\n"; 
 			exit(0); 
 		}
+
+
+		// Time breakdown
+		auto thread_start_time = chrono::high_resolution_clock::now();
 
         while(1)
         { 
@@ -806,6 +810,11 @@ namespace danzer
                     }
                     remaining_file_size -= buffer_size; 
 
+
+
+					// Code for measuring reading time 
+					auto start = chrono::high_resolution_clock::now();
+
                     bytesRead = pread(fd, buffer->data, buffer_size, offset);
                     if (bytesRead != buffer_size)
                     {
@@ -825,6 +834,14 @@ namespace danzer
 
                         reader_idx = (reader_idx + 1) % POOL_SIZE ; 
                     }
+
+
+					// Code for measuring reading time 
+					auto end = chrono::high_resolution_clock::now();
+					// Calculate the duration
+					chrono::duration<double> duration = end - start;
+					reading_time.push_back(duration.count()); 
+
 
                     pthread_cond_signal(&buffer->cond);
                     pthread_mutex_unlock(&buffer->mutex); 
@@ -876,20 +893,99 @@ namespace danzer
                     if (b.filled)
                             printf("Some buffers are filled\n"); 
 		        }
-                
+             
+
+				//if (rank % 10 == 0)
+				//{
+					double mean_reading_time = calculateMean(reading_time); 
+					double stddev_reading_time = calculateStddev(reading_time, mean_reading_time); 
+					output_log("mean_io_time.eval", mean_reading_time, stddev_reading_time); 
+				//}
+
+
+
+				
+					// Code for measuring reading time 
+					auto thread_end_time = chrono::high_resolution_clock::now();
+					chrono::duration<double> duration = thread_end_time - thread_start_time;
+					double total_thread_time = duration.count(); 
+
+					output_log("time_breakdown", "reader", rank, total_thread_time); 
+				
+
                 break; 
             }
-            
-
-        
         }                
     }	
+
+
+	void Dedupe::output_log(const char * log_file_name, const char *thread_type, int rank, double exec_time)
+	{
+		
+		int NumWorkers = worldSize - 1; 
+		string log = log_file_name; 
+		ofstream ofs(log, ios::app); 
+		if (!ofs)
+		{
+			cerr << "Error opening output file\n"; 
+			exit(0); 
+		}
+
+		ofs << "file" << '\t' << thread_type << '\t' ; 
+		ofs << rank << '\t' << exec_time << '\n'; 
+	}
+	
+
+	void Dedupe::output_log(const char * log_file_name, double data1, double data2)
+	{
+		
+		int NumWorkers = worldSize - 1; 
+		string log = log_file_name; 
+		ofstream ofs(log, ios::app); 
+		if (!ofs)
+		{
+			cerr << "Error opening output file\n"; 
+			exit(0); 
+		}
+
+		ofs << "file" << '\t' << NumWorkers << '\t' ; 
+		ofs << data1 << '\t' << data2 << '\n'; 
+	}
+
+
+	double Dedupe::calculateMean(vector<double> list)
+	{
+		double mean, sum=0; 
+		for (double element: list)
+		{
+			sum += element;
+		}
+		mean = sum / list.size(); 
+
+		return mean;
+	}
+
+	double Dedupe::calculateStddev(vector<double> list, double mean)
+	{
+		double stddev, sum=0, dev;
+		for (double element: list)
+		{
+			dev = element - mean; 
+			sum += dev * dev; 
+		}
+		stddev = sum / list.size();
+		stddev = sqrt(stddev); 
+		return stddev;
+	}
+
+
 
     void * Dedupe::workerThread(int w_idx)
     {
         static int test_work_cnt = 0; 
         int worker_idx = w_idx; 
 
+		auto thread_start_time = chrono::high_resolution_clock::now();
         while(1)
         {
 
@@ -943,6 +1039,16 @@ namespace danzer
                     cout << "worker done" <<  rank << endl; 
                     break; 
                 }
+
+
+				// Code for measuring reading time 
+				auto thread_end_time = chrono::high_resolution_clock::now();
+				chrono::duration<double> duration = thread_end_time - thread_start_time;
+				double total_thread_time = duration.count(); 
+
+				output_log("time_breakdown", "worker", rank, total_thread_time); 
+
+
             }
 
         }
