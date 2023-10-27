@@ -41,7 +41,7 @@
 #define TERMINATION_MSG "TERMINATION"
 #define MB (uint64_t)1048576
 
-
+#define NUMMASTERS 10
 using namespace std;
 
 namespace danzer{
@@ -276,7 +276,7 @@ namespace danzer{
     void initialize_queue();
 
     void fb_task_flush(string file_list[], uint64_t file_cnt[]); 
-    void file_task_distribution(std::filesystem::directory_entry entry, vector<File_task_queue> & file_task_queue, vector<pair<string, uint64_t>> &file_task_list);
+    void file_task_distribution(std::filesystem::directory_entry entry, vector<File_task_queue> & file_task_queue, vector<pair<string, uint64_t>> &file_task_list, int *turn);
     void file_task_load_balance(vector<pair<string, uint64_t>> & file_task_list);
     void file_task_end_of_process(vector<File_task_queue> & file_task_queue);
     void file_tasks_decomposition(const char* Msg, int task_cnt); 

@@ -735,7 +735,7 @@ namespace danzer
 		vector <double> reading_time; 
 
 		// Code for LoadStandardization Evaluation
-		int NumWorkers = worldSize-1; 
+		int NumWorkers = worldSize-NUMMASTERS; 
 		int NumWorkerIdx = NumWorkers/24 - 1;
 		int datasetIdx = dataset_map.find(Dataset.c_str())->second; 
 		
@@ -922,7 +922,7 @@ namespace danzer
 	void Dedupe::output_log(const char * log_file_name, const char *thread_type, int rank, double exec_time)
 	{
 		
-		int NumWorkers = worldSize - 1; 
+		int NumWorkers = worldSize - NUMMASTERS; 
 		string log = log_file_name; 
 		ofstream ofs(log, ios::app); 
 		if (!ofs)
@@ -939,7 +939,7 @@ namespace danzer
 	void Dedupe::output_log(const char * log_file_name, double data1, double data2)
 	{
 		
-		int NumWorkers = worldSize - 1; 
+		int NumWorkers = worldSize - NUMMASTERS; 
 		string log = log_file_name; 
 		ofstream ofs(log, ios::app); 
 		if (!ofs)
@@ -1209,7 +1209,7 @@ namespace danzer
 
     int Dedupe::traverse_directory(string directory_path){
         cout << "Directory traversing started" << endl;
-		cout << "number of worker: " << worldSize-1 << endl; 
+		cout << "number of worker: " << worldSize-NUMMASTERS << endl; 
 
         size_t lastSlashPos = directory_path.find_last_of('/'); 
 		Dataset = directory_path.substr(lastSlashPos + 1); 
@@ -1235,7 +1235,10 @@ namespace danzer
 		this->rank = rank;
         cout << "Current process rank: " << this->rank << endl;
 
-        if (rank == MASTER){
+		int file_idx = 0; 
+		int numProc = worldSize - NUMMASTERS; 
+        if (rank == MASTER || rank > numProc){
+        //if (rank == MASTER){
 	        
             FILE * fp = fopen("exec_time.eval", "a"); 
             if (fp == NULL)
@@ -1244,7 +1247,10 @@ namespace danzer
 			fclose(fp); 
 		
 
-            vector<File_task_queue> file_task_queue(worldSize-1); 
+			int master_idx = (rank == MASTER)? MASTER: rank-numProc; 
+			int CntTaskGenerated = 0; 
+
+            vector<File_task_queue> file_task_queue(worldSize-NUMMASTERS); 
 			vector<pair<string, uint64_t>> file_task_list;  // Load Balance			
 			
             // test purpose code: load_balance test 
@@ -1260,9 +1266,9 @@ namespace danzer
 			//auto start = chrono::high_resolution_clock::now();
 			
 			// Code to iterate certain subdirectory
-			
+			int cnt = 0; 
 			for (const auto& dir_entry: filesystem::directory_iterator(directory_path)){
-				if (dir_entry.path().filename().string().find("overlap_test5") == string::npos)
+				if (dir_entry.path().filename().string().find("testdir") == string::npos)
 				{
 					cout << "Directory " << dir_entry.path().filename().string() <<" encountered\n"; 
 					continue; 
@@ -1287,9 +1293,14 @@ namespace danzer
 							continue;
 						}
 
-					    test_regular_file_cnt += 1;
-						file_task_distribution(dir_entry, file_task_queue, file_task_list); 
+					if (file_idx % NUMMASTERS == master_idx)
+						{
+							test_regular_file_cnt += 1;
+							file_task_distribution(dir_entry, file_task_queue, file_task_list, &cnt); 
+						}
+						file_idx ++; 
 						continue;
+			
 					}
 
 					unchecked_file ++ ; 
@@ -1332,8 +1343,8 @@ namespace danzer
             initialize_queue(); 
 
 
-            int ostPerRank = OST_NUMBER / (worldSize-1);
-            int remainder = OST_NUMBER % (worldSize-1);
+            int ostPerRank = OST_NUMBER / (worldSize-NUMMASTERS);
+            int remainder = OST_NUMBER % (worldSize-NUMMASTERS);
             if(rank < remainder){
                 ostPerRank++;
             }
