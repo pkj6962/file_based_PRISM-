@@ -41,7 +41,9 @@
 #define TERMINATION_MSG "TERMINATION"
 #define MB (uint64_t)1048576
 
-#define NUMMASTERS 10
+//#define DANGLINGMASTER 2
+#define DANGLINGMASTER 1
+#define NUMMASTERS (DANGLINGMASTER + 10)
 using namespace std;
 
 namespace danzer{

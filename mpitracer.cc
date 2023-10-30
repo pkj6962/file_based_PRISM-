@@ -610,6 +610,8 @@ namespace danzer
 
         //test code 
         static int file_cnt = 0; 
+		int termRecvCnt = 0; 
+
 
 		char * buffer = (char*)malloc(sizeof(MAX_FILE_PATH_LEN) * 2000);
 		string *file_list = new string[2000]; 
@@ -642,14 +644,18 @@ namespace danzer
 				cout << "receive error: " << errno << this->rank << endl; 
 			}
             if (strncmp(buffer, TERMINATION_MSG, strlen(TERMINATION_MSG)) == 0) {
-                shutdown_flag = true;
+				
+				termRecvCnt ++;
+				if (termRecvCnt == NUMMASTERS-DANGLINGMASTER){
+				
+				shutdown_flag = true;
 				cout << "comm terminated " << rank << endl;
                 printf("rank\t%d\tfile_cnt\t%d\n", rank, file_cnt);
                 printf("rank\t%d\tqueu_siz\t%d\n", rank, file_queue.queue.size());
-                
-
-
 				break;
+				}
+
+
             }
             
             
@@ -735,12 +741,12 @@ namespace danzer
 		vector <double> reading_time; 
 
 		// Code for LoadStandardization Evaluation
-		int NumWorkers = worldSize-NUMMASTERS; 
+		int NumWorkers = worldSize - NUMMASTERS; 
 		int NumWorkerIdx = NumWorkers/24 - 1;
 		int datasetIdx = dataset_map.find(Dataset.c_str())->second; 
 		
 		uint64_t standardized_load_size = StandardizedTaskSizePerProcess[datasetIdx][NumWorkerIdx]; 
-
+		printf("NumWorker NumMaster worldSize: %d %d %d \n", NumWorkers, NUMMASTERS, worldSize); 
 		printf("standardized_load_size: %lld\n", standardized_load_size); 
 
         // Code for LoadStandardization Evaluation 
@@ -905,18 +911,21 @@ namespace danzer
 
 
 				
-					// Code for measuring reading time 
-					auto thread_end_time = chrono::high_resolution_clock::now();
-					chrono::duration<double> duration = thread_end_time - thread_start_time;
-					double total_thread_time = duration.count(); 
-
-					output_log("time_breakdown.eval", "reader", rank, total_thread_time); 
 				
 
                 break; 
             }
         }                
-    }	
+   
+	
+		// Code for measuring reading time 
+		auto thread_end_time = chrono::high_resolution_clock::now();
+		chrono::duration<double> duration = thread_end_time - thread_start_time;
+		double total_thread_time = duration.count(); 
+
+		output_log("time_breakdown.eval", "reader", rank, total_thread_time); 
+	
+	}	
 
 
 	void Dedupe::output_log(const char * log_file_name, const char *thread_type, int rank, double exec_time)
@@ -1237,7 +1246,14 @@ namespace danzer
 
 		int file_idx = 0; 
 		int numProc = worldSize - NUMMASTERS; 
-        if (rank == MASTER || rank > numProc){
+
+		if (rank == MASTER || rank == 49)
+		//if (rank == MASTER)
+		{
+			// do nothing(); 
+		}
+		else if (rank > numProc){
+		//if (rank == MASTER || rank > numProc){
         //if (rank == MASTER){
 	        
             FILE * fp = fopen("exec_time.eval", "a"); 
@@ -1247,7 +1263,9 @@ namespace danzer
 			fclose(fp); 
 		
 
-			int master_idx = (rank == MASTER)? MASTER: rank-numProc; 
+			int master_idx = rank-numProc - DANGLINGMASTER; 
+			//int master_idx = rank-numProc - 1; 
+			//int master_idx = (rank == MASTER)? MASTER: rank-numProc; 
 			int CntTaskGenerated = 0; 
 
             vector<File_task_queue> file_task_queue(worldSize-NUMMASTERS); 
@@ -1263,7 +1281,7 @@ namespace danzer
 			memset(size_per_rank, 0, sizeof(uint64_t) * worldSize); 
 			
 			
-			//auto start = chrono::high_resolution_clock::now();
+			auto start = chrono::high_resolution_clock::now();
 			
 			// Code to iterate certain subdirectory
 			int cnt = 0; 
@@ -1293,7 +1311,7 @@ namespace danzer
 							continue;
 						}
 
-					if (file_idx % NUMMASTERS == master_idx)
+					if (file_idx % (NUMMASTERS-DANGLINGMASTER) == master_idx)
 						{
 							test_regular_file_cnt += 1;
 							file_task_distribution(dir_entry, file_task_queue, file_task_list, &cnt); 
@@ -1310,16 +1328,11 @@ namespace danzer
 			}	
 		
 
-			auto start = chrono::high_resolution_clock::now();
 			if (load_balance)
 			{
                 file_task_load_balance(file_task_list); 
 				//object_task_load_balance(task_queue); f
 			}
-			auto end = chrono::high_resolution_clock::now();
-			// Calculate the duration
-			chrono::duration<double> duration = end - start;
-			cout << "load balance has elapsed " << duration.count() << endl; 
 
 
 			printf("unchecked file: %d/%d\n", unchecked_file, total_file); 
@@ -1331,6 +1344,11 @@ namespace danzer
 //			printf("master task_cnt: %lld\n", this->task_cnt);
             
             file_task_end_of_process(file_task_queue); 
+			
+			auto end = chrono::high_resolution_clock::now();
+			// Calculate the duration
+			chrono::duration<double> duration = end - start;
+			cout << "end master\t" << master_idx << '\t' << duration.count() << endl; 
         }
         else{
             // Mutex initialization
